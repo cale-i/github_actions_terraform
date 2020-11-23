@@ -54,23 +54,55 @@ jobs:
   terraform:
     name: "Terraform"
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        dir: [terraform]
     steps:
       # Checkout the repository to the GitHub Actions runner
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Check diff
+        id: diff
+        uses: technote-space/get-diff-action@v3.2.0
+        with:
+          PREFIX_FILTER: |
+            modules
+            ${{ matrix.dir }}
+          SUFFIX_FILTER: .tf
+
       # Install the latest version of Terraform CLI and configure the Terraform CLI configuration file
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v1
-
-      # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
-      - name: Terraform Init
-        run: terraform init
+        if: steps.diff.outputs.diff
+        uses: hashicorp/setup-terraform@v1.2.0
+        with:
+          terraform_version: 0.13.4
 
       # Checks that all Terraform configuration files adhere to a canonical format
       - name: Terraform Format
-        run: terraform fmt -check
+        id: fmt
+        if: steps.diff.outputs.diff
+        run: terraform fmt -check -recursive
+        working-directory: ${{ matrix.dir }}
+        continue-on-error: true
+
+      # Initialize a new or existing Terraform working directory by creating initial files, loading any remote state, downloading modules, etc.
+      - name: Terraform Init
+        id: init
+        if: steps.diff.outputs.diff
+        run: terraform init
+        working-directory: ${{ matrix.dir }}
+
+      - name: Terraform validate
+        id: validate
+        if: steps.diff.outputs.diff
+        run: terraform validate -no-color
+        working-directory: ${{ matrix.dir }}
 
       # Generates an execution plan for Terraform
       - name: Terraform Plan
-        run: terraform plan
+        id: plan
+        if: steps.diff.outputs.diff
+        run: terraform plan -no-color
+        working-directory: ${{ matrix.dir }}
+        continue-on-error: true
